@@ -14,10 +14,15 @@ const { developmentChains, INITIAL_SUPPLY } = require("../../helper-hardhat-conf
             user1 = accounts.user1
 
             await deployments.fixture("all")
-            ourToken = await ethers.getContract("OurToken", deployer)
+
+            const ourTokenDeployment = await deployments.get("OurToken")
+            ourToken = await ethers.getContractAt(
+                ourTokenDeployment.abi,
+                ourTokenDeployment.address
+            )
         })
         it("was deployed", async () => {
-            assert(ourToken.address)
+            assert(ourToken.getAddress())
         })
         describe("constructor", () => {
             it("Should have correct INITIAL_SUPPLY of token ", async () => {
@@ -34,7 +39,7 @@ const { developmentChains, INITIAL_SUPPLY } = require("../../helper-hardhat-conf
         })
         describe("transfers", () => {
             it("Should be able to transfer tokens successfully to an address", async () => {
-                const tokensToSend = ethers.utils.parseEther("10")
+                const tokensToSend = ethers.parseEther("10")
                 await ourToken.transfer(user1, tokensToSend)
                 expect(await ourToken.balanceOf(user1)).to.equal(tokensToSend)
             })
@@ -47,11 +52,17 @@ const { developmentChains, INITIAL_SUPPLY } = require("../../helper-hardhat-conf
         })
         describe("allowances", () => {
             const amount = (20 * multiplier).toString()
+            let playerToken
             beforeEach(async () => {
-                playerToken = await ethers.getContract("OurToken", user1)
+                const ourTokenDeployment = await deployments.get("OurToken")
+                playerToken = await ethers.getContractAt(
+                    ourTokenDeployment.abi,
+                    ourTokenDeployment.address,
+                    await ethers.provider.getSigner(user1)
+                )
             })
             it("Should approve other address to spend token", async () => {
-                const tokensToSpend = ethers.utils.parseEther("5")
+                const tokensToSpend = ethers.parseEther("5")
                 //Deployer is approving that user1 can spend 5 of their precious OT's
                 await ourToken.approve(user1, tokensToSpend)
                 await playerToken.transferFrom(deployer, user1, tokensToSpend)
@@ -60,7 +71,7 @@ const { developmentChains, INITIAL_SUPPLY } = require("../../helper-hardhat-conf
             it("doesn't allow an unnaproved member to do transfers", async () => {
                 await expect(
                     playerToken.transferFrom(deployer, user1, amount)
-                ).to.be.revertedWith("ERC20: insufficient allowance")
+                ).to.be.revertedWithCustomError(ourToken,"ERC20InsufficientAllowance")
             })
             it("emits an approval event, when an approval occurs", async () => {
                 await expect(ourToken.approve(user1, amount)).to.emit(ourToken, "Approval")
@@ -74,7 +85,7 @@ const { developmentChains, INITIAL_SUPPLY } = require("../../helper-hardhat-conf
                 await ourToken.approve(user1, amount)
                 await expect(
                     playerToken.transferFrom(deployer, user1, (40 * multiplier).toString())
-                ).to.be.revertedWith("ERC20: insufficient allowance")
+                ).to.be.revertedWithCustomError(ourToken, "ERC20InsufficientAllowance")
             })
         })
     })
